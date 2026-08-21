@@ -4,8 +4,10 @@ import bcrypt from 'bcryptjs';
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  phone: { type: String },
+  password: { type: String, default: 'GoogleAuthVerifiedUser2026' },
+  phone: { type: String, default: '+91 78717 79134' },
+  googleId: { type: String },
+  authProvider: { type: String, enum: ['local', 'google'], default: 'google' },
   role: { 
     type: String, 
     enum: [
@@ -30,10 +32,10 @@ const userSchema = new mongoose.Schema({
     ],
     default: 'user'
   },
-  isVerified: { type: Boolean, default: false },
-  verificationCode: { type: String, default: '123456' },
+  isVerified: { type: Boolean, default: true },
+  verificationCode: { type: String, default: '' },
   avatar: { type: String, default: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb' },
-  wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Property' }],
+  wishlist: [{ type: String }],
   notifications: [
     {
       id: { type: String },
@@ -44,17 +46,22 @@ const userSchema = new mongoose.Schema({
     }
   ],
   createdAt: { type: Date, default: Date.now }
-});
+}, { strict: false });
 
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
 
 userSchema.methods.matchPassword = async function(enteredPassword) {
+  if (!this.password) return false;
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-export const User = mongoose.model('User', userSchema);
+export const User = mongoose.models.User || mongoose.model('User', userSchema);

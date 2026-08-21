@@ -4,12 +4,11 @@ const ticketSchema = new mongoose.Schema(
   {
     ticketId: {
       type: String,
-      required: true,
-      unique: true
+      required: true
     },
     senderName: {
       type: String,
-      required: true
+      default: 'Guest User'
     },
     senderEmail: {
       type: String,
@@ -17,7 +16,6 @@ const ticketSchema = new mongoose.Schema(
     },
     senderRole: {
       type: String,
-      enum: ['user', 'guest', 'owner', 'vendor', 'owner_and_vendor', 'guide', 'staff'],
       default: 'user'
     },
     subject: {
@@ -30,7 +28,7 @@ const ticketSchema = new mongoose.Schema(
     },
     message: {
       type: String,
-      required: true
+      default: ''
     },
     status: {
       type: String,
@@ -42,7 +40,7 @@ const ticketSchema = new mongoose.Schema(
       default: ''
     }
   },
-  { timestamps: true }
+  { timestamps: true, strict: false }
 );
 
-export const Ticket = mongoose.model('Ticket', ticketSchema);
+export const Ticket = mongoose.models.Ticket || mongoose.model('Ticket', ticketSchema);
