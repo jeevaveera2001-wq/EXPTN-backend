@@ -150,6 +150,258 @@ const sendVerificationMail = async (toEmail, recipientName, code) => {
   }
 };
 
+// Generic Universal Mail Dispatcher (Gmail SMTP with Resend Fallback)
+const sendDirectMail = async ({ to, subject, html }) => {
+  if (!to) return;
+  const smtpUser = process.env.SMTP_EMAIL || 'exploretamizhagam@gmail.com';
+  const smtpPass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD || 'kanlmqsvgbxnwfbo').replace(/\s+/g, '');
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+
+    const info = await transporter.sendMail({
+      from: `"Explore Tamil Nadu Reservations" <${smtpUser}>`,
+      to,
+      subject,
+      html
+    });
+    console.log(`✅ [GMAIL SMTP DELIVERED] "${subject}" sent to ${to} (ID: ${info.messageId})`);
+    return info;
+  } catch (err) {
+    console.error(`⚠️ Gmail SMTP delivery error for ${to}:`, err.message);
+  }
+
+  // Fallback to Resend API
+  try {
+    const RESEND_KEY = process.env.RESEND_API_KEY || '';
+    if (RESEND_KEY) {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RESEND_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: 'Explore Tamil Nadu <onboarding@resend.dev>',
+          to: [to],
+          subject,
+          html
+        })
+      });
+      console.log(`✅ [RESEND FALLBACK DELIVERED] "${subject}" sent to ${to}`);
+    }
+  } catch (re) {}
+};
+
+// ⏳ 1. Booking Request Received Email (Pending Property Verification)
+const sendBookingPendingMail = async (booking) => {
+  const customerEmail = booking.customerEmail || booking.userEmail;
+  if (!customerEmail) return;
+
+  const mailHtml = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 20px; border: 1px solid #242429;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0;">Explore Tamil Nadu</h1>
+        <p style="color: #919191; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px;">Verified Stays & Resorts Reservation</p>
+      </div>
+
+      <div style="background-color: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid rgba(36,36,41,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        
+        <div style="text-align: center; margin-bottom: 20px;">
+          <span style="display: inline-block; background-color: #fef3c7; color: #92400e; font-size: 11px; font-weight: 800; font-family: monospace; padding: 6px 14px; border-radius: 20px; border: 1px solid #fde68a;">
+            ⏳ STATUS: PENDING HOST & PROPERTY AVAILABILITY VERIFICATION
+          </span>
+        </div>
+
+        <h2 style="color: #111827; font-size: 19px; font-weight: 800; margin: 0 0 10px 0; text-align: center;">
+          Booking Request Received: ${booking.bookingId}
+        </h2>
+
+        <p style="color: #4b5563; font-size: 13px; line-height: 1.6; margin-bottom: 20px; text-align: center;">
+          Hello <strong>${booking.customerName || booking.userName || 'Traveler'}</strong>, we have safely received your reservation request and payment of <strong>₹${Number(booking.totalAmount).toLocaleString()}</strong> via Razorpay.
+          Our reservation executive and the property host are currently validating room allocation and availability for your selected dates.
+        </p>
+
+        <!-- Summary Table -->
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; font-family: monospace;">
+          <tr style="border-bottom: 1px solid #f3f4f6;">
+            <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Property / Stay:</td>
+            <td style="padding: 10px 0; color: #111827; font-weight: 800; text-align: right;">${booking.propertyTitle || booking.itemTitle}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f3f4f6;">
+            <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Location Circuit:</td>
+            <td style="padding: 10px 0; color: #111827; text-align: right;">${booking.destination || 'Tamil Nadu'}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f3f4f6;">
+            <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Check-In & Check-Out:</td>
+            <td style="padding: 10px 0; color: #111827; font-weight: bold; text-align: right;">${booking.checkIn || booking.checkInDate} → ${booking.checkOut || booking.checkOutDate} (${booking.nights || 1} Night(s))</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f3f4f6;">
+            <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Guest Details:</td>
+            <td style="padding: 10px 0; color: #111827; text-align: right;">${booking.guests || 2} Guest(s) (${booking.guestType || 'Stay'})</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f3f4f6;">
+            <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Payment Method:</td>
+            <td style="padding: 10px 0; color: #0284c7; font-weight: bold; text-align: right;">Razorpay (${booking.paymentId || 'Captured'})</td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 0; color: #111827; font-size: 14px; font-weight: 800;">Total Amount Paid:</td>
+            <td style="padding: 12px 0; color: #059669; font-size: 16px; font-weight: 900; text-align: right;">₹${Number(booking.totalAmount).toLocaleString()}</td>
+          </tr>
+        </table>
+
+        <div style="background-color: #f8fafc; border-left: 4px solid #f59e0b; padding: 14px; border-radius: 8px; font-size: 12px; color: #334155; line-height: 1.5; margin-bottom: 16px;">
+          <strong>ℹ️ What Happens Next?</strong> Once the property host or booking manager accepts your booking, you will automatically receive an <strong>Official Booking Confirmation Email</strong> with your check-in pass. You can also view live status updates anytime in your dashboard.
+        </div>
+
+      </div>
+
+      <div style="text-align: center; margin-top: 24px; color: #9ca3af; font-size: 11px; font-family: monospace;">
+        &copy; 2026 Explore Tamil Nadu Reservations Platform · +91 78717 79134
+      </div>
+    </div>
+  `;
+
+  await sendDirectMail({
+    to: customerEmail,
+    subject: `⏳ Booking Request Received (Pending Verification): ${booking.bookingId} - ${booking.propertyTitle || booking.itemTitle}`,
+    html: mailHtml
+  });
+
+  // Also send notification email to property host and admin
+  const adminAndHostEmails = [
+    'exploretamizhagam@gmail.com',
+    booking.ownerEmail
+  ].filter(Boolean);
+
+  for (const hostTo of adminAndHostEmails) {
+    const hostHtml = `
+      <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; background: #fff; padding: 24px; border: 1px solid #ddd; border-radius: 12px;">
+        <h2 style="color: #b45309; margin-top: 0;">🔔 New Booking Awaiting Your Approval!</h2>
+        <p><strong>Booking ID:</strong> ${booking.bookingId}</p>
+        <p><strong>Property:</strong> ${booking.propertyTitle || booking.itemTitle}</p>
+        <p><strong>Customer:</strong> ${booking.customerName || booking.userName} (${customerEmail}, ${booking.customerPhone || ''})</p>
+        <p><strong>Dates:</strong> ${booking.checkIn || booking.checkInDate} to ${booking.checkOut || booking.checkOutDate} (${booking.nights || 1} Nights)</p>
+        <p><strong>Guests:</strong> ${booking.guests || 2} Guests</p>
+        <p><strong>Total Paid:</strong> ₹${Number(booking.totalAmount).toLocaleString()}</p>
+        <p>Please log in to your dashboard to <strong>Accept & Confirm</strong> or reject this reservation.</p>
+      </div>
+    `;
+    await sendDirectMail({
+      to: hostTo,
+      subject: `🔔 ACTION REQUIRED: New Booking Request ${booking.bookingId} for ${booking.propertyTitle || booking.itemTitle}`,
+      html: hostHtml
+    });
+  }
+};
+
+// 🎉 2. Booking Confirmed Voucher Email
+const sendBookingConfirmedMail = async (booking) => {
+  const customerEmail = booking.customerEmail || booking.userEmail;
+  if (!customerEmail) return;
+
+  const mailHtml = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 20px; border: 1px solid #242429;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0;">Explore Tamil Nadu</h1>
+        <p style="color: #919191; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px;">Official Verified Hotel Voucher</p>
+      </div>
+
+      <div style="background-color: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid rgba(36,36,41,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        
+        <div style="text-align: center; margin-bottom: 20px;">
+          <span style="display: inline-block; background-color: #d1fae5; color: #065f46; font-size: 12px; font-weight: 900; font-family: monospace; padding: 8px 18px; border-radius: 20px; border: 1px solid #a7f3d0;">
+            🎉 OFFICIAL BOOKING CONFIRMED & VERIFIED
+          </span>
+        </div>
+
+        <h2 style="color: #111827; font-size: 21px; font-weight: 900; margin: 0 0 8px 0; text-align: center;">
+          ${booking.propertyTitle || booking.itemTitle}
+        </h2>
+
+        <p style="color: #4b5563; font-size: 13px; line-height: 1.6; margin-bottom: 20px; text-align: center;">
+          Dear <strong>${booking.customerName || booking.userName || 'Traveler'}</strong>, your stay reservation has been <strong>officially verified and confirmed</strong> by the property manager! Please present this confirmation voucher or your Booking ID at check-in.
+        </p>
+
+        <!-- Booking Pass Box -->
+        <div style="background-color: #f8fafc; border: 2px dashed #059669; border-radius: 14px; padding: 20px; margin-bottom: 24px;">
+          
+          <div style="text-align: center; margin-bottom: 16px;">
+            <span style="font-size: 11px; color: #64748b; font-family: monospace; font-weight: bold;">OFFICIAL BOOKING REFERENCE ID</span>
+            <div style="font-size: 26px; font-weight: 900; color: #0f172a; font-family: monospace; letter-spacing: 2px;">
+              ${booking.bookingId}
+            </div>
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px; font-family: monospace;">
+            <tr style="border-top: 1px solid #e2e8f0;">
+              <td style="padding: 8px 0; color: #64748b;">Host / Property:</td>
+              <td style="padding: 8px 0; color: #0f172a; font-weight: bold; text-align: right;">${booking.propertyTitle || booking.itemTitle} (${booking.ownerName || 'Verified Host'})</td>
+            </tr>
+            <tr style="border-top: 1px solid #e2e8f0;">
+              <td style="padding: 8px 0; color: #64748b;">Location:</td>
+              <td style="padding: 8px 0; color: #0f172a; text-align: right;">${booking.destination || 'Tamil Nadu'}</td>
+            </tr>
+            <tr style="border-top: 1px solid #e2e8f0;">
+              <td style="padding: 8px 0; color: #64748b;">Check-In Date:</td>
+              <td style="padding: 8px 0; color: #047857; font-weight: bold; text-align: right;">${booking.checkIn || booking.checkInDate} (From 12:00 PM)</td>
+            </tr>
+            <tr style="border-top: 1px solid #e2e8f0;">
+              <td style="padding: 8px 0; color: #64748b;">Check-Out Date:</td>
+              <td style="padding: 8px 0; color: #047857; font-weight: bold; text-align: right;">${booking.checkOut || booking.checkOutDate} (Until 11:00 AM)</td>
+            </tr>
+            <tr style="border-top: 1px solid #e2e8f0;">
+              <td style="padding: 8px 0; color: #64748b;">Stay Duration:</td>
+              <td style="padding: 8px 0; color: #0f172a; font-weight: bold; text-align: right;">${booking.nights || 1} Night(s)</td>
+            </tr>
+            <tr style="border-top: 1px solid #e2e8f0;">
+              <td style="padding: 8px 0; color: #64748b;">Guests:</td>
+              <td style="padding: 8px 0; color: #0f172a; text-align: right;">${booking.guests || 2} Guest(s) (${booking.guestType || 'Verified Stay'})</td>
+            </tr>
+            <tr style="border-top: 1px solid #e2e8f0;">
+              <td style="padding: 8px 0; color: #64748b;">Razorpay Payment:</td>
+              <td style="padding: 8px 0; color: #0284c7; font-weight: bold; text-align: right;">PAID (${booking.paymentId || 'Completed'})</td>
+            </tr>
+            <tr style="border-top: 2px solid #cbd5e1;">
+              <td style="padding: 10px 0; color: #0f172a; font-size: 14px; font-weight: 900;">Total Amount Paid:</td>
+              <td style="padding: 10px 0; color: #059669; font-size: 18px; font-weight: 900; text-align: right;">₹${Number(booking.totalAmount).toLocaleString()}</td>
+            </tr>
+          </table>
+
+        </div>
+
+        <div style="text-align: center;">
+          <a href="https://frontend-blond-iota-kzel6q4tzd.vercel.app/dashboard/user" style="display: inline-block; background-color: #242429; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: bold; padding: 12px 24px; border-radius: 24px;">
+            Open My Bookings Dashboard & Voucher
+          </a>
+        </div>
+
+      </div>
+
+      <div style="text-align: center; margin-top: 24px; color: #9ca3af; font-size: 11px; font-family: monospace;">
+        &copy; 2026 Explore Tamil Nadu Reservations Platform · +91 78717 79134
+      </div>
+    </div>
+  `;
+
+  await sendDirectMail({
+    to: customerEmail,
+    subject: `🎉 OFFICIAL BOOKING CONFIRMED: ${booking.bookingId} - ${booking.propertyTitle || booking.itemTitle}`,
+    html: mailHtml
+  });
+};
+
 // --- AUTHENTICATION & EMAIL VERIFICATION ENDPOINTS ---
 
 // --- AUTHENTICATION & DIRECT MONGODB ATLAS USER SYNC ---
@@ -1420,7 +1672,7 @@ router.post('/bookings', async (req, res) => {
       bookingId,
       totalAmount,
       amount: totalAmount,
-      status: body.status || 'Confirmed',
+      status: body.status || 'Pending Verification',
       paymentStatus: body.paymentStatus || 'Paid',
       paymentMethod: body.paymentMethod || 'Razorpay Test Gateway',
       paymentId: body.paymentId || ('pay_rzp_' + Date.now()),
@@ -1438,39 +1690,42 @@ router.post('/bookings', async (req, res) => {
       memoryBookings.unshift(saved);
     }
 
+    // 📧 1. Dispatch Booking Received (Pending Verification) Email to Customer & Host
+    sendBookingPendingMail(saved).catch(e => console.error('Pending mail error:', e.message));
+
     // Broadcast live socket updates immediately to all dashboards
     broadcast(req, 'new_booking', saved);
     broadcast(req, 'payment_received', saved);
     broadcast(req, 'stats_updated', {});
 
-    // Send instant notification to customer
+    // Send instant in-app notification to customer
     const custEmail = (saved.customerEmail || saved.userEmail || '').toLowerCase().trim();
     if (custEmail) {
       broadcast(req, 'new_notification', {
         userEmail: custEmail,
-        title: `🎟️ Booking Confirmed (${saved.itemTitle || saved.propertyTitle || 'Stay'})`,
-        message: `Your reservation for ${saved.nights || 1} night(s) (₹${Number(saved.totalAmount).toLocaleString()}) is confirmed!`,
+        title: `⏳ Booking Placed (Pending Verification) - ${saved.itemTitle || saved.propertyTitle || 'Stay'}`,
+        message: `Your booking ${saved.bookingId} is placed! Host is verifying availability. You'll receive your confirmed pass once accepted.`,
         date: 'Just now'
       });
     }
 
-    // Send instant notification to property owner
+    // Send instant in-app notification to property owner
     const hostEmail = (saved.ownerEmail || '').toLowerCase().trim();
     if (hostEmail) {
       broadcast(req, 'new_notification', {
         userEmail: hostEmail,
-        title: `💰 New Booking Received (${saved.itemTitle || saved.propertyTitle || 'Property'})`,
-        message: `New reservation by ${saved.customerName || saved.userName || 'Tourist'} for ₹${Number(saved.totalAmount).toLocaleString()}.`,
+        title: `🔔 New Booking Awaiting Approval (${saved.itemTitle || saved.propertyTitle || 'Property'})`,
+        message: `New reservation ${saved.bookingId} by ${saved.customerName || saved.userName || 'Tourist'} for ₹${Number(saved.totalAmount).toLocaleString()}. Please review and accept.`,
         date: 'Just now'
       });
     }
 
-    console.log(`✅ [BOOKING RECORDED] ${bookingId} for ${saved.itemTitle || saved.propertyTitle} (₹${totalAmount}) [Razorpay: ${saved.paymentId}]`);
+    console.log(`✅ [BOOKING RECORDED - PENDING VERIFICATION] ${bookingId} for ${saved.itemTitle || saved.propertyTitle} (₹${totalAmount}) [Razorpay: ${saved.paymentId}]`);
 
     res.status(201).json({
       success: true,
       booking: saved,
-      message: 'Booking confirmed and payment processed successfully!'
+      message: 'Booking submitted and pending host availability confirmation. Verification email sent!'
     });
   } catch (err) {
     console.error('Booking save error:', err);
@@ -1489,11 +1744,40 @@ router.put('/bookings/:id/status', async (req, res) => {
       } else {
         updated = await Booking.findOneAndUpdate({ $or: [{ bookingId }, { _id: bookingId }] }, { status }, { new: true });
       }
+      if (updated && updated.toObject) updated = updated.toObject();
     }
-    broadcast(req, 'booking_updated', updated || { _id: bookingId, status });
+    
+    if (!updated) {
+      const idx = memoryBookings.findIndex(b => (b.id === bookingId || b._id === bookingId || b.bookingId === bookingId));
+      if (idx !== -1) {
+        memoryBookings[idx].status = status;
+        updated = memoryBookings[idx];
+      } else {
+        updated = { _id: bookingId, bookingId, status };
+      }
+    }
+
+    // 📧 2. If status is changed to Confirmed, dispatch Official Hotel Voucher Confirmation Email!
+    if (status === 'Confirmed' && updated) {
+      sendBookingConfirmedMail(updated).catch(e => console.error('Confirmed mail error:', e.message));
+
+      const custEmail = (updated.customerEmail || updated.userEmail || '').toLowerCase().trim();
+      if (custEmail) {
+        broadcast(req, 'new_notification', {
+          userEmail: custEmail,
+          title: `🎉 OFFICIAL BOOKING CONFIRMED: ${updated.bookingId}`,
+          message: `Your stay at ${updated.propertyTitle || updated.itemTitle || 'Property'} has been confirmed! Confirmation voucher sent to your email.`,
+          date: 'Just now'
+        });
+      }
+    }
+
+    broadcast(req, 'booking_updated', updated);
     broadcast(req, 'stats_updated', {});
+    console.log(`✅ [BOOKING STATUS UPDATED] ${bookingId} -> ${status}`);
     res.json(updated || { success: true });
   } catch (err) {
+    console.error('Status update error:', err);
     res.status(500).json({ message: err.message });
   }
 });
