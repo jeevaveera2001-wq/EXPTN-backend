@@ -206,8 +206,11 @@ const sendDirectMail = async ({ to, subject, html }) => {
 
 // ⏳ 1. Booking Request Received Email (Pending Property Verification)
 const sendBookingPendingMail = async (booking) => {
-  const customerEmail = booking.customerEmail || booking.userEmail;
-  if (!customerEmail) return;
+  const customerEmail = booking.customerEmail || booking.userEmail || booking.email;
+  if (!customerEmail) {
+    console.warn(`[PENDING MAIL SKIPPED] No email found for booking ${booking.bookingId}`);
+    return;
+  }
 
   const mailHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 20px; border: 1px solid #242429;">
@@ -308,8 +311,12 @@ const sendBookingPendingMail = async (booking) => {
 
 // 🎉 2. Booking Confirmed Voucher Email
 const sendBookingConfirmedMail = async (booking) => {
-  const customerEmail = booking.customerEmail || booking.userEmail;
-  if (!customerEmail) return;
+  const customerEmail = booking.customerEmail || booking.userEmail || booking.email;
+  if (!customerEmail) {
+    console.warn(`[CONFIRMED MAIL SKIPPED] No email found for booking ${booking.bookingId}`);
+    return;
+  }
+  console.log(`🚀 [DISPATCHING OFFICIAL CONFIRMATION VOUCHER EMAIL] to ${customerEmail} for ${booking.bookingId}...`);
 
   const mailHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 20px; border: 1px solid #242429;">
