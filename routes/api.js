@@ -1716,7 +1716,7 @@ router.post('/bookings', async (req, res) => {
       });
     }
 
-    // Send instant in-app notification to property owner
+    // Send instant in-app notification to property owner / vendor
     const hostEmail = (saved.ownerEmail || '').toLowerCase().trim();
     if (hostEmail) {
       broadcast(req, 'new_notification', {
@@ -1726,6 +1726,22 @@ router.post('/bookings', async (req, res) => {
         date: 'Just now'
       });
     }
+
+    // Send instant in-app notification to Super Admin
+    broadcast(req, 'new_notification', {
+      userEmail: 'exploretamizhagam@gmail.com',
+      title: `🔔 [ADMIN ALERT] New Booking ${saved.bookingId} (${saved.itemTitle || saved.propertyTitle})`,
+      message: `Reservation by ${saved.customerName || 'Tourist'} (₹${Number(saved.totalAmount).toLocaleString()}) awaiting host verification.`,
+      date: 'Just now'
+    });
+
+    // Send instant in-app notification to Booking Manager & Staff
+    broadcast(req, 'new_notification', {
+      userEmail: 'staff@exploretamilnadu.com',
+      title: `📋 [BOOKING MANAGER] New Booking ${saved.bookingId}`,
+      message: `Stay ${saved.itemTitle || saved.propertyTitle} booked by ${saved.customerName || 'Tourist'}.`,
+      date: 'Just now'
+    });
 
     console.log(`✅ [BOOKING RECORDED - PENDING VERIFICATION] ${bookingId} for ${saved.itemTitle || saved.propertyTitle} (₹${totalAmount}) [Razorpay: ${saved.paymentId}]`);
 
