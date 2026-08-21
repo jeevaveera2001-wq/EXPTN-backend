@@ -1748,8 +1748,9 @@ router.put('/bookings/:id/status', async (req, res) => {
     if (mongoose.connection.readyState === 1) {
       if (mongoose.Types.ObjectId.isValid(bookingId)) {
         updated = await Booking.findByIdAndUpdate(bookingId, { status }, { new: true });
-      } else {
-        updated = await Booking.findOneAndUpdate({ $or: [{ bookingId }, { _id: bookingId }] }, { status }, { new: true });
+      }
+      if (!updated) {
+        updated = await Booking.findOneAndUpdate({ bookingId }, { status }, { new: true });
       }
       if (updated && updated.toObject) updated = updated.toObject();
     }
@@ -1796,10 +1797,10 @@ router.delete('/bookings/:id', async (req, res) => {
       if (mongoose.Types.ObjectId.isValid(bookingId)) {
         await Booking.findByIdAndDelete(bookingId);
       } else {
-        await Booking.findOneAndDelete({ $or: [{ bookingId }, { _id: bookingId }] });
+        await Booking.findOneAndDelete({ bookingId });
       }
     }
-    broadcast(req, 'booking_deleted', { _id: bookingId });
+    broadcast(req, 'booking_deleted', { _id: bookingId, bookingId });
     broadcast(req, 'stats_updated', {});
     res.json({ success: true });
   } catch (err) {
