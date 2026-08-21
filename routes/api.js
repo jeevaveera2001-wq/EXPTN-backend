@@ -154,6 +154,7 @@ const sendVerificationMail = async (toEmail, recipientName, code) => {
 const sendDirectMail = async ({ to, subject, html }) => {
   if (!to) return;
   const smtpUser = process.env.SMTP_EMAIL || 'exploretamizhagam@gmail.com';
+  const smtpPass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD || 'kanlmqsvgbxnwfbo').replace(/\s+/g, '');
   const defaultResendKey = ['re', 'T4AkDfx3', 'MSteuVRp9ZojP53LaYPPjVDn'].join('_');
   const resendApiKey = process.env.RESEND_API_KEY || defaultResendKey;
 
