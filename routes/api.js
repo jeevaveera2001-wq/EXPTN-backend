@@ -318,16 +318,16 @@ const sendBookingPendingMail = async (booking) => {
   }
 };
 
-// 🎉 2. Booking Confirmed Voucher Email
+// 🎉 2. Booking Confirmed Voucher Email (Dispatched to Guest, Vendor & Super Admin)
 const sendBookingConfirmedMail = async (booking) => {
-  const customerEmail = booking.customerEmail || booking.userEmail || booking.email;
-  if (!customerEmail) {
-    console.warn(`[CONFIRMED MAIL SKIPPED] No email found for booking ${booking.bookingId}`);
-    return;
-  }
-  console.log(`🚀 [DISPATCHING OFFICIAL CONFIRMATION VOUCHER EMAIL] to ${customerEmail} for ${booking.bookingId}...`);
+  const customerEmail = (booking.customerEmail || booking.userEmail || booking.email || '').trim().toLowerCase();
+  const vendorEmail = (booking.ownerEmail || booking.hostEmail || 'lastzetas@gmail.com').trim().toLowerCase();
+  const adminEmail = 'exploretamizhagam@gmail.com';
 
-  const mailHtml = `
+  console.log(`🚀 [DISPATCHING CONFIRMATION EMAILS] Booking: ${booking.bookingId} | Guest: ${customerEmail} | Host: ${vendorEmail}`);
+
+  // 1. Guest Stay Pass Voucher HTML
+  const guestMailHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 20px; border: 1px solid #242429;">
       <div style="text-align: center; margin-bottom: 24px;">
         <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0;">Explore Tamil Nadu</h1>
@@ -347,7 +347,7 @@ const sendBookingConfirmedMail = async (booking) => {
         </h2>
 
         <p style="color: #4b5563; font-size: 13px; line-height: 1.6; margin-bottom: 20px; text-align: center;">
-          Dear <strong>${booking.customerName || booking.userName || 'Traveler'}</strong>, your stay reservation has been <strong>officially verified and confirmed</strong> by the property manager! Please present this confirmation voucher or your Booking ID at check-in.
+          Dear <strong>${booking.customerName || booking.userName || 'Traveler'}</strong>, your stay reservation has been <strong>officially verified and confirmed</strong> by the property host! Please present this confirmation voucher or your Booking ID at check-in.
         </p>
 
         <!-- Booking Pass Box -->
@@ -411,14 +411,93 @@ const sendBookingConfirmedMail = async (booking) => {
     </div>
   `;
 
-  await sendDirectMail({
-    to: customerEmail,
-    subject: `🎉 OFFICIAL BOOKING CONFIRMED: ${booking.bookingId} - ${booking.propertyTitle || booking.itemTitle}`,
-    html: mailHtml
-  });
+  // 2. Vendor / Property Owner Host Confirmation HTML
+  const vendorMailHtml = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f0fdf4; padding: 32px; border-radius: 20px; border: 1px solid #86efac;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <h1 style="color: #065f46; font-size: 24px; font-weight: 800; margin: 0;">Explore Tamil Nadu - Host Portal</h1>
+        <p style="color: #047857; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px;">Host Reservation Confirmed</p>
+      </div>
+
+      <div style="background-color: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid rgba(6,95,70,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <span style="display: inline-block; background-color: #d1fae5; color: #065f46; font-size: 12px; font-weight: 900; font-family: monospace; padding: 8px 18px; border-radius: 20px; border: 1px solid #a7f3d0;">
+            ✅ GUEST RESERVATION OFFICIALLY CONFIRMED
+          </span>
+        </div>
+
+        <h2 style="color: #111827; font-size: 19px; font-weight: 900; margin: 0 0 8px 0; text-align: center;">
+          ${booking.propertyTitle || booking.itemTitle}
+        </h2>
+
+        <p style="color: #4b5563; font-size: 13px; line-height: 1.6; margin-bottom: 20px; text-align: center;">
+          Hello <strong>${booking.ownerName || 'Property Host'}</strong>, you have confirmed booking <strong>${booking.bookingId}</strong>. The guest has been issued their official check-in pass.
+        </p>
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px; font-family: monospace; margin-bottom: 20px;">
+          <tr style="border-top: 1px solid #e2e8f0;">
+            <td style="padding: 8px 0; color: #64748b;">Booking ID:</td>
+            <td style="padding: 8px 0; color: #0f172a; font-weight: bold; text-align: right;">${booking.bookingId}</td>
+          </tr>
+          <tr style="border-top: 1px solid #e2e8f0;">
+            <td style="padding: 8px 0; color: #64748b;">Guest Name:</td>
+            <td style="padding: 8px 0; color: #0f172a; font-weight: bold; text-align: right;">${booking.customerName || booking.userName || 'Tourist'}</td>
+          </tr>
+          <tr style="border-top: 1px solid #e2e8f0;">
+            <td style="padding: 8px 0; color: #64748b;">Guest Email & Phone:</td>
+            <td style="padding: 8px 0; color: #0f172a; text-align: right;">${customerEmail}, ${booking.customerPhone || '+91 78717 79134'}</td>
+          </tr>
+          <tr style="border-top: 1px solid #e2e8f0;">
+            <td style="padding: 8px 0; color: #64748b;">Check-In & Check-Out:</td>
+            <td style="padding: 8px 0; color: #047857; font-weight: bold; text-align: right;">${booking.checkIn || booking.checkInDate} → ${booking.checkOut || booking.checkOutDate} (${booking.nights || 1} Nights)</td>
+          </tr>
+          <tr style="border-top: 1px solid #e2e8f0;">
+            <td style="padding: 8px 0; color: #64748b;">Guests Count:</td>
+            <td style="padding: 8px 0; color: #0f172a; text-align: right;">${booking.guests || 2} Guests (${booking.guestType || 'Stay'})</td>
+          </tr>
+          <tr style="border-top: 2px solid #cbd5e1;">
+            <td style="padding: 10px 0; color: #0f172a; font-size: 13px; font-weight: bold;">Reservation Payout:</td>
+            <td style="padding: 10px 0; color: #059669; font-size: 16px; font-weight: 900; text-align: right;">₹${Number(booking.totalAmount).toLocaleString()}</td>
+          </tr>
+        </table>
+
+        <div style="text-align: center;">
+          <a href="https://frontend-blond-iota-kzel6q4tzd.vercel.app/dashboard/vendor" style="display: inline-block; background-color: #065f46; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: bold; padding: 12px 24px; border-radius: 24px;">
+            Open Vendor Portal
+          </a>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 1. Send Stay Pass to Guest / Customer
+  if (customerEmail) {
+    await sendDirectMail({
+      to: customerEmail,
+      subject: `🎉 OFFICIAL BOOKING CONFIRMED: ${booking.bookingId} - ${booking.propertyTitle || booking.itemTitle}`,
+      html: guestMailHtml
+    });
+  }
+
+  // 2. Send Host Confirmation to Property Owner / Vendor
+  if (vendorEmail && vendorEmail !== customerEmail) {
+    await sendDirectMail({
+      to: vendorEmail,
+      subject: `✅ GUEST RESERVATION CONFIRMED: ${booking.bookingId} - ${booking.propertyTitle || booking.itemTitle}`,
+      html: vendorMailHtml
+    });
+  }
+
+  // 3. Send Official Record to Super Admin
+  if (adminEmail && adminEmail !== customerEmail && adminEmail !== vendorEmail) {
+    await sendDirectMail({
+      to: adminEmail,
+      subject: `👑 [ADMIN LOG] Reservation Confirmed: ${booking.bookingId} - ${booking.propertyTitle || booking.itemTitle}`,
+      html: guestMailHtml
+    });
+  }
 };
 
-// --- AUTHENTICATION & EMAIL VERIFICATION ENDPOINTS ---
 
 // --- AUTHENTICATION & DIRECT MONGODB ATLAS USER SYNC ---
 
