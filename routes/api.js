@@ -1808,4 +1808,18 @@ router.delete('/bookings/:id', async (req, res) => {
   }
 });
 
+router.delete('/bookings-clear-all', async (req, res) => {
+  try {
+    if (mongoose.connection.readyState === 1) {
+      await Booking.deleteMany({});
+    }
+    memoryBookings.length = 0;
+    broadcast(req, 'database_reset_zero', {});
+    broadcast(req, 'stats_updated', {});
+    res.json({ success: true, message: 'All bookings cleared successfully.' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 export default router;
