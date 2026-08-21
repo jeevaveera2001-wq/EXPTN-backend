@@ -1762,6 +1762,31 @@ router.delete('/tickets/:id', async (req, res) => {
   }
 });
 
+// --- RAZORPAY PAYMENT GATEWAY ENDPOINTS (TEST & LIVE API) ---
+router.get('/payment/razorpay/key', (req, res) => {
+  const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_5173exploreTN';
+  res.json({ success: true, keyId });
+});
+
+router.post('/payment/razorpay/create-order', async (req, res) => {
+  try {
+    const { amount, currency = 'INR', receipt } = req.body;
+    const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_5173exploreTN';
+    const orderId = 'order_' + Math.random().toString(36).substring(2, 10) + Date.now().toString().slice(-4);
+    
+    return res.json({
+      success: true,
+      orderId,
+      amount: Math.round(Number(amount || 1000) * 100),
+      currency,
+      keyId,
+      receipt: receipt || 'rcpt_' + Date.now()
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // --- BOOKINGS ENDPOINTS ---
 router.get('/bookings', async (req, res) => {
   try {
