@@ -506,17 +506,19 @@ router.get('/auth/me', async (req, res) => {
       return res.status(400).json({ message: 'Email required' });
     }
     const normalized = email.toLowerCase().trim();
+    const user = await findUserByEmail(normalized);
+
     if (normalized === 'exploretamizhagam@gmail.com') {
       return res.json({
-        _id: 'super-admin-jeeva',
-        name: 'Jeeva Veeramani',
+        _id: user?._id || 'super-admin-jeeva',
+        name: user?.name || 'Jeeva Veeramani',
         email: 'exploretamizhagam@gmail.com',
-        phone: '+91 78717 79134',
+        phone: user?.phone || '+91 78717 79134',
+        avatar: user?.avatar || '',
         role: 'super_admin'
       });
     }
 
-    const user = await findUserByEmail(normalized);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -525,7 +527,7 @@ router.get('/auth/me', async (req, res) => {
       name: user.name,
       email: user.email,
       phone: user.phone,
-      avatar: user.avatar,
+      avatar: user.avatar || '',
       role: user.role || 'user',
       isVerified: user.isVerified !== false
     });
@@ -605,12 +607,12 @@ router.put('/users/profile', async (req, res) => {
       const updateData = {};
       if (name) updateData.name = name;
       if (phone) updateData.phone = phone;
-      if (avatar) updateData.avatar = avatar;
+      if (avatar !== undefined) updateData.avatar = avatar;
 
       updatedUser = await User.findOneAndUpdate(
         { email: normalizedEmail },
         { $set: updateData },
-        { new: true }
+        { new: true, upsert: true }
       );
     }
 
@@ -621,7 +623,7 @@ router.put('/users/profile', async (req, res) => {
         email: normalizedEmail,
         name: name || existing.name || normalizedEmail.split('@')[0],
         phone: phone || existing.phone || '+91 78717 79134',
-        avatar: avatar || existing.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb'
+        avatar: avatar !== undefined ? avatar : (existing.avatar || '')
       };
       memoryUsers.set(normalizedEmail, updatedUser);
     }
@@ -630,8 +632,8 @@ router.put('/users/profile', async (req, res) => {
     broadcast(req, 'user_updated', updatedUser);
     broadcast(req, 'new_notification', {
       userEmail: normalizedEmail,
-      title: '📸 Profile Updated',
-      message: 'Your profile details and avatar picture have been updated successfully.',
+      title: '📸 Profile Picture & Info Updated',
+      message: 'Your profile picture and account details have been updated and saved.',
       date: 'Just now'
     });
 
