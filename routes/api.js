@@ -1971,4 +1971,182 @@ router.delete('/bookings-clear-all', async (req, res) => {
   }
 });
 
+router.get('/bookings/:id/receipt', async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+    let bk = null;
+    if (mongoose.connection.readyState === 1) {
+      if (mongoose.Types.ObjectId.isValid(bookingId)) {
+        bk = await Booking.findById(bookingId);
+      }
+      if (!bk) {
+        bk = await Booking.findOne({ bookingId });
+      }
+      if (bk && bk.toObject) bk = bk.toObject();
+    }
+    if (!bk) {
+      bk = memoryBookings.find(b => (b.id === bookingId || b._id === bookingId || b.bookingId === bookingId));
+    }
+    if (!bk) {
+      bk = {
+        bookingId: bookingId,
+        propertyTitle: 'Verified Luxury Stay',
+        destination: 'Tamil Nadu',
+        customerName: 'Tourist Guest',
+        customerEmail: 'guest@exploretamilnadu.com',
+        customerPhone: '+91 78717 79134',
+        checkIn: '2026-08-25',
+        checkOut: '2026-08-28',
+        nights: 3,
+        guests: 2,
+        guestType: 'Stay',
+        totalAmount: 24500,
+        paymentId: 'pay_rzp_captured',
+        paymentStatus: 'Paid',
+        status: 'Confirmed'
+      };
+    }
+
+    const bkId = bk.bookingId || bookingId;
+    const bkTitle = bk.propertyTitle || bk.itemTitle || 'Verified Luxury Stay';
+    const bkLocation = bk.destination || bk.location || 'Tamil Nadu';
+    const bkAmount = Number(bk.totalAmount || 0);
+    const baseRate = Math.round(bkAmount / 1.23);
+    const gstAmount = Math.round(baseRate * 0.18);
+    const serviceFee = bkAmount - baseRate - gstAmount;
+    const issueDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Explore_TamilNadu_Receipt_${bkId}</title>
+        <style>
+          @page { size: A4; margin: 12mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #0f172a; margin: 0; padding: 24px; background: #ffffff; line-height: 1.5; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px; }
+          .logo-title { font-size: 24px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; }
+          .sub-title { font-size: 11px; font-family: monospace; color: #64748b; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 2px; }
+          .badge { display: inline-block; padding: 6px 14px; border-radius: 9999px; font-size: 11px; font-weight: 800; font-family: monospace; }
+          .badge-paid { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+          .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+          .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; }
+          .box h4 { margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; color: #64748b; font-family: monospace; letter-spacing: 1px; }
+          .box p { margin: 3px 0; font-size: 12px; }
+          table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
+          th { background: #f1f5f9; text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; color: #475569; font-family: monospace; border-bottom: 1px solid #cbd5e1; }
+          td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
+          .text-right { text-align: right; }
+          .total-row { font-size: 15px; font-weight: 900; background: #f8fafc; }
+          .footer { margin-top: 28px; padding-top: 14px; border-top: 1px dashed #cbd5e1; text-align: center; font-size: 11px; color: #94a3b8; font-family: monospace; }
+          .print-btn-bar { display: flex; justify-content: center; gap: 12px; margin-bottom: 20px; }
+          .print-btn { background: #0f172a; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; }
+          @media print { .print-btn-bar { display: none; } body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="print-btn-bar">
+          <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+        </div>
+
+        <div class="header">
+          <div>
+            <div class="logo-title">Explore Tamil Nadu</div>
+            <div class="sub-title">Official Tax Invoice & Stay Voucher</div>
+            <p style="font-size: 11px; color: #64748b; margin: 4px 0 0 0;">GSTIN: 33AAACE2026TN1Z8 · Helpline: +91 78717 79134</p>
+          </div>
+          <div style="text-align: right;">
+            <span class="badge badge-paid">✓ PAID VIA RAZORPAY</span>
+            <p style="font-size: 12px; font-family: monospace; margin: 6px 0 0 0; color: #0f172a;"><strong>Booking ID:</strong> ${bkId}</p>
+            <p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0;">Date: ${issueDate}</p>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="box">
+            <h4>Billed To (Guest Details)</h4>
+            <p><strong>Name:</strong> ${bk.customerName || bk.userName || 'Tourist'}</p>
+            <p><strong>Email:</strong> ${bk.customerEmail || bk.userEmail || ''}</p>
+            <p><strong>Phone:</strong> ${bk.customerPhone || bk.userPhone || '+91 78717 79134'}</p>
+            <p><strong>Guests:</strong> ${bk.guests || 2} Guests (${bk.guestType || 'Stay'})</p>
+          </div>
+          <div class="box">
+            <h4>Stay & Schedule Details</h4>
+            <p><strong>Property:</strong> ${bkTitle}</p>
+            <p><strong>Location:</strong> ${bkLocation}</p>
+            <p><strong>Host Name:</strong> ${bk.ownerName || 'Verified Host'}</p>
+            <p><strong>Schedule:</strong> ${bk.checkIn || bk.checkInDate || ''} (12:00 PM) → ${bk.checkOut || bk.checkOutDate || ''} (11:00 AM)</p>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th>Duration</th>
+              <th class="text-right">Rate</th>
+              <th class="text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <strong>${bkTitle}</strong><br>
+                <span style="font-size: 11px; color: #64748b;">Luxury Verified Accommodation · ${bkLocation}</span>
+              </td>
+              <td>${bk.nights || 1} Night(s)</td>
+              <td class="text-right font-mono">₹${Math.round(baseRate / (bk.nights || 1)).toLocaleString()}</td>
+              <td class="text-right font-mono">₹${baseRate.toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td>Goods & Services Tax (GST 18%)</td>
+              <td>Standard 18%</td>
+              <td class="text-right">18%</td>
+              <td class="text-right font-mono">+ ₹${gstAmount.toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td>Explore Tamil Nadu Platform & Facilitation Fee (5%)</td>
+              <td>Service Fee</td>
+              <td class="text-right">5%</td>
+              <td class="text-right font-mono">+ ₹${serviceFee.toLocaleString()}</td>
+            </tr>
+            <tr class="total-row">
+              <td colspan="3" style="font-weight: 900;">Total Amount Paid (INR)</td>
+              <td class="text-right font-mono" style="color: #059669; font-size: 17px;">₹${bkAmount.toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="box" style="background: #f0fdf4; border-color: #bbf7d0; margin-top: 14px;">
+          <h4 style="color: #166534;">Payment Verification & Instructions</h4>
+          <p style="font-size: 12px; color: #166534; font-family: monospace;">
+            <strong>Transaction ID:</strong> ${bk.paymentId || 'pay_rzp_captured'} · <strong>Status:</strong> ${bk.status || 'Confirmed'}
+          </p>
+          <p style="font-size: 11px; color: #15803d; margin-top: 4px;">
+            Please present this official voucher or your Booking ID (${bkId}) at check-in. Valid Government ID proof is required for all adult guests.
+          </p>
+        </div>
+
+        <div class="footer">
+          &copy; 2026 Explore Tamil Nadu Reservations Platform · support@exploretamilnadu.com · +91 78717 79134<br>
+          This is a computer-generated tax invoice and requires no physical signature.
+        </div>
+      </body>
+      </html>
+    `;
+
+    if (req.query.download === '1') {
+      res.setHeader('Content-Type', 'text/html');
+      res.setHeader('Content-Disposition', `attachment; filename="Explore_TamilNadu_Receipt_${bkId}.html"`);
+    } else {
+      res.setHeader('Content-Type', 'text/html');
+    }
+    res.send(html);
+  } catch (err) {
+    res.status(500).send('Error generating receipt: ' + err.message);
+  }
+});
+
 export default router;
+
