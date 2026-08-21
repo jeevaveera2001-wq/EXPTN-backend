@@ -91,12 +91,14 @@ const sendVerificationMail = async (toEmail, recipientName, code) => {
   `;
 
   // 1. Primary Engine: Google Apps Script Webhook (Guaranteed 100% Delivery via Google Cloud HTTPS)
-  const googleScriptUrl = process.env.GOOGLE_SCRIPT_MAIL_URL || '';
+  const defaultGoogleScriptUrl = 'https://script.google.com/macros/s/AKfycbwyEdpqDFBeRH4ovQUNJOPoB10lZtuEVzGFy8qBkdacvdtt-J_AE2kUSNvDoeCiW-rr/exec';
+  const googleScriptUrl = process.env.GOOGLE_SCRIPT_MAIL_URL || defaultGoogleScriptUrl;
   if (googleScriptUrl) {
     try {
       const gRes = await fetch(googleScriptUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
           to: toEmail,
           subject: `🔐 Your 6-Digit Explore Tamil Nadu Verification Code: ${code}`,
@@ -169,14 +171,16 @@ const sendVerificationMail = async (toEmail, recipientName, code) => {
 // Generic Universal Mail Dispatcher (Triple Engine: Google Apps Script Webhook + Gmail Service + Resend REST)
 const sendDirectMail = async ({ to, subject, html }) => {
   if (!to) return;
-  const googleScriptUrl = process.env.GOOGLE_SCRIPT_MAIL_URL || '';
+  const defaultGoogleScriptUrl = 'https://script.google.com/macros/s/AKfycbwyEdpqDFBeRH4ovQUNJOPoB10lZtuEVzGFy8qBkdacvdtt-J_AE2kUSNvDoeCiW-rr/exec';
+  const googleScriptUrl = process.env.GOOGLE_SCRIPT_MAIL_URL || defaultGoogleScriptUrl;
 
   // 1. Primary Engine: Google Apps Script Cloud Webhook (Guaranteed 100% Delivery via Google Cloud HTTPS)
   if (googleScriptUrl) {
     try {
       const gRes = await fetch(googleScriptUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ to, subject, html })
       });
       const gData = await gRes.text();
