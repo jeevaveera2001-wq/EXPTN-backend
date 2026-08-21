@@ -1694,11 +1694,20 @@ router.delete('/vehicles/:id', async (req, res) => {
 // --- SUPPORT TICKETS ENDPOINTS ---
 router.get('/tickets', async (req, res) => {
   try {
+    const { email, senderEmail } = req.query;
+    const filterEmail = (email || senderEmail || '').toLowerCase().trim();
+    
     if (mongoose.connection.readyState === 1) {
-      const tickets = await Ticket.find({}).sort({ createdAt: -1 }).maxTimeMS(3000);
+      const query = filterEmail ? { senderEmail: { $regex: new RegExp(`^${filterEmail}$`, 'i') } } : {};
+      const tickets = await Ticket.find(query).sort({ createdAt: -1 }).maxTimeMS(3000);
       return res.json(tickets);
     }
   } catch (err) {}
+  
+  const filterEmail = (req.query.email || req.query.senderEmail || '').toLowerCase().trim();
+  if (filterEmail) {
+    return res.json(memoryTickets.filter(t => (t.senderEmail || '').toLowerCase() === filterEmail));
+  }
   res.json(memoryTickets);
 });
 
@@ -1708,21 +1717,61 @@ router.post('/tickets', async (req, res) => {
     delete body._id;
     delete body.id;
     const ticketId = body.ticketId || ('TCK-' + Math.floor(2000 + Math.random() * 8000));
+    const senderEmail = (body.senderEmail || body.email || 'guest@exploretamilnadu.com').toLowerCase().trim();
+    const senderName = body.senderName || body.name || 'User / Host';
+    const senderRole = body.senderRole || body.role || 'user';
+    const subject = body.subject || 'Support Assistance Request';
+    const category = body.category || 'General Inquiry';
+    const priority = body.priority || 'Medium';
+    const message = body.message || '';
+
     let saved = null;
     if (mongoose.connection.readyState === 1) {
       const ticket = new Ticket({
-        ...body,
         ticketId,
-        status: body.status || 'Open'
+        senderName,
+        senderEmail,
+        senderRole,
+        subject,
+        category,
+        priority,
+        message,
+        status: body.status || 'Open',
+        adminReply: ''
       });
       saved = await ticket.save();
       saved = saved.toObject ? saved.toObject() : saved;
       saved.id = saved._id ? saved._id.toString() : 'tck-' + Date.now();
     } else {
-      saved = { ...body, ticketId, status: body.status || 'Open', _id: 'tck-' + Date.now(), id: 'tck-' + Date.now() };
+      saved = {
+        _id: 'tck-' + Date.now(),
+        id: 'tck-' + Date.now(),
+        ticketId,
+        senderName,
+        senderEmail,
+        senderRole,
+        subject,
+        category,
+        priority,
+        message,
+        status: body.status || 'Open',
+        adminReply: '',
+        createdAt: new Date().toISOString()
+      };
       memoryTickets.unshift(saved);
     }
+
+    console.log(`🎫 [SUPPORT TICKET CREATED] ${ticketId} by ${senderName} (${senderEmail}) [${category}]`);
+
+    // Broadcast to Customer Support Dashboard & Super Admin Control Center
     broadcast(req, 'new_ticket', saved);
+    broadcast(req, 'new_notification', {
+      title: `🎫 NEW SUPPORT TICKET: ${ticketId}`,
+      message: `[${category}] ${subject} from ${senderName} (${senderRole})`,
+      date: 'Just now'
+    });
+    broadcast(req, 'stats_updated', {});
+
     res.status(201).json(saved);
   } catch (err) {
     console.error('Ticket save error:', err);
@@ -1730,33 +1779,79 @@ router.post('/tickets', async (req, res) => {
   }
 });
 
-router.put('/tickets/:id/status', async (req, res) => {
+const handleTicketStatusUpdate = async (req, res) => {
   try {
+    const ticketIdent = req.params.id;
     const { status, adminReply } = req.body;
+    let updated = null;
+
     if (mongoose.connection.readyState === 1) {
-      if (mongoose.Types.ObjectId.isValid(req.params.id)) {
-        const updated = await Ticket.findByIdAndUpdate(
-          req.params.id, 
-          { status, adminReply }, 
+      if (mongoose.Types.ObjectId.isValid(ticketIdent)) {
+        updated = await Ticket.findByIdAndUpdate(
+          ticketIdent, 
+          { status: status || 'Resolved', adminReply: adminReply || '' }, 
           { new: true }
         );
-        broadcast(req, 'ticket_updated', updated);
-        return res.json(updated);
+      }
+      if (!updated) {
+        updated = await Ticket.findOneAndUpdate(
+          { ticketId: ticketIdent },
+          { status: status || 'Resolved', adminReply: adminReply || '' },
+          { new: true }
+        );
       }
     }
-  } catch (err) {}
-  broadcast(req, 'ticket_updated', { _id: req.params.id, status: req.body.status });
-  res.json({ success: true });
-});
+
+    if (!updated) {
+      const idx = memoryTickets.findIndex(t => t._id === ticketIdent || t.id === ticketIdent || t.ticketId === ticketIdent);
+      if (idx !== -1) {
+        memoryTickets[idx].status = status || memoryTickets[idx].status;
+        if (adminReply !== undefined) memoryTickets[idx].adminReply = adminReply;
+        updated = memoryTickets[idx];
+      } else {
+        updated = { _id: ticketIdent, ticketId: ticketIdent, status, adminReply };
+      }
+    }
+
+    // Broadcast ticket update to User, Vendor, Support Executive & Super Admin
+    broadcast(req, 'ticket_updated', updated);
+    if (updated.senderEmail) {
+      broadcast(req, 'new_notification', {
+        userEmail: updated.senderEmail.toLowerCase().trim(),
+        title: `🎫 TICKET UPDATED: ${updated.ticketId || ticketIdent}`,
+        message: `Status: ${updated.status}. Support Team Reply: "${adminReply || 'Updated by support team.'}"`,
+        date: 'Just now'
+      });
+    }
+    broadcast(req, 'stats_updated', {});
+
+    console.log(`✅ [TICKET UPDATED] ${ticketIdent} -> ${status}`);
+    return res.json(updated);
+  } catch (err) {
+    console.error('Ticket update error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+router.put('/tickets/:id/status', handleTicketStatusUpdate);
+router.put('/tickets/:id', handleTicketStatusUpdate);
+router.post('/tickets/:id/reply', handleTicketStatusUpdate);
 
 router.delete('/tickets/:id', async (req, res) => {
   try {
+    const ticketIdent = req.params.id;
     if (mongoose.connection.readyState === 1) {
-      if (mongoose.Types.ObjectId.isValid(req.params.id)) {
-        await Ticket.findByIdAndDelete(req.params.id);
+      if (mongoose.Types.ObjectId.isValid(ticketIdent)) {
+        await Ticket.findByIdAndDelete(ticketIdent);
+      } else {
+        await Ticket.findOneAndDelete({ ticketId: ticketIdent });
       }
     }
-    broadcast(req, 'ticket_deleted', { _id: req.params.id });
+    const idx = memoryTickets.findIndex(t => t._id === ticketIdent || t.id === ticketIdent || t.ticketId === ticketIdent);
+    if (idx !== -1) memoryTickets.splice(idx, 1);
+
+    broadcast(req, 'ticket_deleted', { _id: ticketIdent, ticketId: ticketIdent });
+    broadcast(req, 'stats_updated', {});
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
