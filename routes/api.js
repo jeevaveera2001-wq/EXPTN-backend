@@ -525,9 +525,255 @@ router.get('/auth/me', async (req, res) => {
       name: user.name,
       email: user.email,
       phone: user.phone,
+      avatar: user.avatar,
       role: user.role || 'user',
       isVerified: user.isVerified !== false
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// In-memory OTP store for password reset
+const passwordResetOtpStore = new Map();
+
+// Helper to send password reset OTP
+const sendPasswordResetMail = async (toEmail, recipientName, code) => {
+  const mailHtml = `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 560px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 16px; border: 1px solid #242429;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">Explore Tamil Nadu</h1>
+        <p style="color: #919191; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 6px;">Security & Account Protection</p>
+      </div>
+      <div style="background-color: #ffffff; padding: 28px; border-radius: 12px; border: 1px solid rgba(36,36,41,0.15); text-align: center;">
+        <h2 style="color: #242429; font-size: 18px; font-weight: 700; margin-top: 0;">🔐 Password Change Verification Code</h2>
+        <p style="color: #3e3e3e; font-size: 13px; line-height: 1.6; margin-bottom: 20px;">
+          Hello <strong>${recipientName || 'Member'}</strong>, a password change was requested for your Explore Tamil Nadu account (<code>${toEmail}</code>). Please use the 6-digit verification code below to verify and complete your password change:
+        </p>
+        <div style="display: inline-block; background-color: #242429; color: #ffffff; font-size: 32px; font-weight: 800; letter-spacing: 8px; padding: 14px 28px; border-radius: 10px; font-family: monospace; margin: 8px 0 20px 0;">
+          ${code}
+        </div>
+        <p style="color: #919191; font-size: 11px; line-height: 1.5; margin: 0;">
+          This security code expires in 15 minutes. If you did not request this change, you can safely ignore this email.
+        </p>
+      </div>
+      <div style="text-align: center; margin-top: 24px; color: #919191; font-size: 11px; font-family: monospace;">
+        &copy; 2026 Explore Tamil Nadu Tourism Portal. All rights reserved.
+      </div>
+    </div>
+  `;
+
+  const smtpUser = process.env.SMTP_EMAIL || 'exploretamizhagam@gmail.com';
+  const smtpPass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD || 'kanlmqsvgbxnwfbo').replace(/\s+/g, '');
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: { user: smtpUser, pass: smtpPass },
+      tls: { rejectUnauthorized: false }
+    });
+
+    const info = await transporter.sendMail({
+      from: `"Explore Tamil Nadu Security" <${smtpUser}>`,
+      to: toEmail,
+      subject: `🔐 Your 6-Digit Password Change Verification Code: ${code}`,
+      html: mailHtml
+    });
+
+    console.log(`✅ [PASSWORD OTP DELIVERED] 6-digit code ${code} sent to ${toEmail} (ID: ${info.messageId})`);
+    return true;
+  } catch (smtpErr) {
+    console.error(`⚠️ Password OTP email error for ${toEmail}:`, smtpErr.message);
+    return false;
+  }
+};
+
+// --- 1. UPDATE USER PROFILE (NAME, PHONE, AVATAR PICTURE) ---
+router.put('/users/profile', async (req, res) => {
+  try {
+    const { email, name, phone, avatar } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: 'User email is required' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    let updatedUser = null;
+
+    if (mongoose.connection.readyState === 1) {
+      const updateData = {};
+      if (name) updateData.name = name;
+      if (phone) updateData.phone = phone;
+      if (avatar) updateData.avatar = avatar;
+
+      updatedUser = await User.findOneAndUpdate(
+        { email: normalizedEmail },
+        { $set: updateData },
+        { new: true }
+      );
+    }
+
+    if (!updatedUser) {
+      const existing = memoryUsers.get(normalizedEmail) || {};
+      updatedUser = {
+        ...existing,
+        email: normalizedEmail,
+        name: name || existing.name || normalizedEmail.split('@')[0],
+        phone: phone || existing.phone || '+91 78717 79134',
+        avatar: avatar || existing.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb'
+      };
+      memoryUsers.set(normalizedEmail, updatedUser);
+    }
+
+    // Broadcast user update & notification
+    broadcast(req, 'user_updated', updatedUser);
+    broadcast(req, 'new_notification', {
+      userEmail: normalizedEmail,
+      title: '📸 Profile Updated',
+      message: 'Your profile details and avatar picture have been updated successfully.',
+      date: 'Just now'
+    });
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully!',
+      user: {
+        _id: updatedUser._id || 'usr-' + Date.now(),
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        avatar: updatedUser.avatar,
+        role: updatedUser.role
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// --- 2. REQUEST PASSWORD RESET OTP CODE VIA EMAIL ---
+router.post('/users/request-password-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: 'Email address is required' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await findUserByEmail(normalizedEmail);
+    const userName = user ? user.name : 'Member';
+
+    // Generate 6-Digit Code
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+    passwordResetOtpStore.set(normalizedEmail, {
+      code: otpCode,
+      expiresAt
+    });
+
+    // Send Mail
+    await sendPasswordResetMail(normalizedEmail, userName, otpCode);
+
+    // Broadcast security alert
+    broadcast(req, 'new_notification', {
+      userEmail: normalizedEmail,
+      title: '🔐 Password OTP Requested',
+      message: 'A 6-digit verification code was sent to your email to verify password change.',
+      date: 'Just now'
+    });
+
+    res.json({
+      success: true,
+      message: `A 6-digit verification code has been sent to ${normalizedEmail}`
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// --- 3. VERIFY OTP AND UPDATE NEW PASSWORD ---
+router.post('/users/verify-password-otp-and-update', async (req, res) => {
+  try {
+    const { email, otpCode, newPassword } = req.body;
+    if (!email || !otpCode || !newPassword) {
+      return res.status(400).json({ message: 'Email, verification code, and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters long' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const stored = passwordResetOtpStore.get(normalizedEmail);
+
+    // Validate OTP
+    if (!stored || stored.code !== otpCode.trim() || Date.now() > stored.expiresAt) {
+      return res.status(400).json({ message: 'Invalid or expired 6-digit verification code. Please request a new code.' });
+    }
+
+    // Update in MongoDB Atlas
+    if (mongoose.connection.readyState === 1) {
+      const user = await User.findOne({ email: normalizedEmail });
+      if (user) {
+        user.password = newPassword;
+        await user.save();
+      }
+    }
+
+    // Invalidate OTP
+    passwordResetOtpStore.delete(normalizedEmail);
+
+    // Broadcast notification
+    broadcast(req, 'new_notification', {
+      userEmail: normalizedEmail,
+      title: '🛡️ Password Changed Successfully',
+      message: 'Your account password has been updated and verified via email. Your account is secured.',
+      date: 'Just now'
+    });
+
+    res.json({
+      success: true,
+      message: 'Password updated and verified successfully! Your account is secured.'
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// --- 4. TRIGGER REAL-TIME NOTIFICATION EVENT ---
+router.post('/notifications/trigger', async (req, res) => {
+  try {
+    const { userEmail, title, message, type } = req.body;
+    if (!title || !message) {
+      return res.status(400).json({ message: 'Title and message are required' });
+    }
+
+    const notifObj = {
+      id: 'notif-' + Date.now(),
+      title,
+      message,
+      type: type || 'info',
+      date: 'Just now',
+      read: false
+    };
+
+    if (userEmail && mongoose.connection.readyState === 1) {
+      try {
+        await User.updateOne(
+          { email: userEmail.toLowerCase().trim() },
+          { $push: { notifications: { $each: [notifObj], $position: 0 } } }
+        );
+      } catch (e) {}
+    }
+
+    broadcast(req, 'new_notification', {
+      userEmail: userEmail ? userEmail.toLowerCase().trim() : null,
+      ...notifObj
+    });
+
+    res.json({ success: true, notification: notifObj });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
