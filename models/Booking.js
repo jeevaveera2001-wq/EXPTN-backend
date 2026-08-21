@@ -14,7 +14,11 @@ const bookingSchema = new mongoose.Schema({
   guests: { type: Number, default: 2 },
   totalAmount: { type: Number, required: true },
   amount: { type: Number },
-  status: { type: String, enum: ['Confirmed', 'Pending Approval', 'Cancelled', 'Completed', 'Approved'], default: 'Pending Approval' },
+  status: { 
+    type: String, 
+    enum: ['Confirmed', 'Pending Approval', 'Pending Verification', 'Pending', 'Cancelled', 'Completed', 'Approved', 'Declined'], 
+    default: 'Pending Approval' 
+  },
   paymentStatus: { type: String, enum: ['Paid', 'Pending', 'Refunded'], default: 'Paid' },
   ownerName: { type: String },
   ownerEmail: { type: String },

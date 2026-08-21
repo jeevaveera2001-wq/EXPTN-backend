@@ -1673,13 +1673,25 @@ router.post('/bookings', async (req, res) => {
     delete body.id;
     const bookingId = body.bookingId || ('ETN-BK-' + Math.floor(100000 + Math.random() * 900000));
     const totalAmount = Number(body.totalAmount || body.amount || 0);
+    const customerName = body.customerName || body.userName || 'Tourist Guest';
+    const customerEmail = body.customerEmail || body.userEmail || 'guest@exploretamilnadu.com';
+    const checkIn = body.checkIn || body.checkInDate || new Date().toISOString().split('T')[0];
+    const checkOut = body.checkOut || body.checkOutDate || new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
     const bookingData = {
       ...body,
       bookingId,
+      customerName,
+      userName: customerName,
+      customerEmail,
+      userEmail: customerEmail,
+      checkIn,
+      checkInDate: checkIn,
+      checkOut,
+      checkOutDate: checkOut,
       totalAmount,
       amount: totalAmount,
-      status: body.status || 'Pending Verification',
+      status: body.status || 'Pending Approval',
       paymentStatus: body.paymentStatus || 'Paid',
       paymentMethod: body.paymentMethod || 'Razorpay Test Gateway',
       paymentId: body.paymentId || ('pay_rzp_' + Date.now()),
