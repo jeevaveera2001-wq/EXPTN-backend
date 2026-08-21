@@ -21,6 +21,15 @@ const propertySchema = new mongoose.Schema({
   googleMapsUrl: { type: String },
   description: { type: String },
   amenities: [{ type: String }],
+  ownerRules: [{ type: String }],
+  reviews: [{
+    userName: { type: String },
+    userEmail: { type: String },
+    rating: { type: Number, default: 5 },
+    comment: { type: String },
+    tripType: { type: String, default: 'Verified Stay' },
+    date: { type: Date, default: Date.now }
+  }],
   ownerId: { type: String },
   ownerName: { type: String, default: 'Host Owner' },
   ownerEmail: { type: String },
