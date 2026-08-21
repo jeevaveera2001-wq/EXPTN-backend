@@ -111,25 +111,20 @@ const sendVerificationMail = async (toEmail, recipientName, code) => {
     }
   }
 
-  // 2. Direct Gmail SMTP Delivery (Universal Inbox Delivery via Google App Password)
+  // 2. Direct Gmail Delivery (Auto-negotiated TLS via Google App Password)
   const smtpUser = process.env.SMTP_EMAIL || 'exploretamizhagam@gmail.com';
   const smtpPass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD || 'kanlmqsvgbxnwfbo').replace(/\s+/g, '');
 
   try {
     const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
+      service: 'gmail',
       auth: {
         user: smtpUser,
         pass: smtpPass
       },
       tls: {
         rejectUnauthorized: false
-      },
-      connectionTimeout: 4000,
-      greetingTimeout: 4000,
-      socketTimeout: 4000
+      }
     });
 
     const info = await transporter.sendMail({
@@ -139,10 +134,10 @@ const sendVerificationMail = async (toEmail, recipientName, code) => {
       html: mailHtml
     });
 
-    console.log(`✅ [GMAIL SMTP DELIVERED] 6-digit code ${code} sent to ${toEmail} (ID: ${info.messageId})`);
+    console.log(`✅ [GMAIL DELIVERED] 6-digit code ${code} sent to ${toEmail} (ID: ${info.messageId})`);
     return;
   } catch (smtpErr) {
-    console.error(`⚠️ Gmail SMTP delivery notice for ${toEmail}:`, smtpErr.message);
+    console.error(`⚠️ Gmail delivery notice for ${toEmail}:`, smtpErr.message);
   }
 
   // 3. Secondary Fallback: Resend API
@@ -171,7 +166,7 @@ const sendVerificationMail = async (toEmail, recipientName, code) => {
   }
 };
 
-// Generic Universal Mail Dispatcher (Triple Engine: Google Apps Script Webhook + Gmail SMTP + Resend REST)
+// Generic Universal Mail Dispatcher (Triple Engine: Google Apps Script Webhook + Gmail Service + Resend REST)
 const sendDirectMail = async ({ to, subject, html }) => {
   if (!to) return;
   const googleScriptUrl = process.env.GOOGLE_SCRIPT_MAIL_URL || '';
@@ -197,20 +192,15 @@ const sendDirectMail = async ({ to, subject, html }) => {
   const defaultResendKey = ['re', 'T4AkDfx3', 'MSteuVRp9ZojP53LaYPPjVDn'].join('_');
   const resendApiKey = process.env.RESEND_API_KEY || defaultResendKey;
 
-  // 2. Secondary Engine: Direct Gmail SMTP
+  // 2. Secondary Engine: Direct Gmail Service
   try {
     const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
+      service: 'gmail',
       auth: {
         user: smtpUser,
         pass: smtpPass
       },
-      tls: { rejectUnauthorized: false },
-      connectionTimeout: 4000,
-      greetingTimeout: 4000,
-      socketTimeout: 4000
+      tls: { rejectUnauthorized: false }
     });
 
     const info = await transporter.sendMail({
@@ -219,10 +209,10 @@ const sendDirectMail = async ({ to, subject, html }) => {
       subject,
       html
     });
-    console.log(`✅ [GMAIL SMTP DELIVERED] "${subject}" sent to ${to} (ID: ${info.messageId})`);
+    console.log(`✅ [GMAIL DELIVERED] "${subject}" sent to ${to} (ID: ${info.messageId})`);
     return info;
   } catch (err) {
-    console.warn(`⚠️ Gmail SMTP delivery note for ${to} (${err.message}). Dispatching via Resend HTTPS API...`);
+    console.warn(`⚠️ Gmail delivery note for ${to} (${err.message}). Dispatching via Resend HTTPS API...`);
   }
 
   // 3. Fallback: Resend HTTPS REST API (Port 443 - Cloud Safe)
